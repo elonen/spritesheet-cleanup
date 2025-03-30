@@ -11,7 +11,7 @@ def estimate_grid_size(
         h_guess: float|None = None,
         w_slop_mult: float = 0.3,
         h_slop_mult: float = 0.3,
-        ) -> tuple[float, float, float, float]:
+        ) -> tuple[float, float, float, float, ]:
     """
     Detect the original pixel grid size in a scaled-up pixel art image.
 
@@ -96,53 +96,49 @@ def estimate_grid_size(
 
         # Only attempt fit if we have enough data points
         if len(x_data) >= 3:
-            try:
-                # Initial guess for parameters
-                p0 = [simple_estimate, 1.0, hist[peak_idx]]
+            # Initial guess for parameters
+            p0 = [simple_estimate, 1.0, hist[peak_idx]]
 
-                # Fit the Gaussian
-                popt, _ = curve_fit(gaussian, x_data, y_data, p0=p0)
+            # Fit the Gaussian
+            popt, _ = curve_fit(gaussian, x_data, y_data, p0=p0)
 
-                # Extract the parameters
-                mean = popt[0]
-                std_dev = abs(popt[1])  # Ensure positive
+            # Extract the parameters
+            mean = popt[0]
+            std_dev = abs(popt[1])  # Ensure positive
 
-                # Visualize the fit if debug is enabled
-                if debug:
-                    plt.figure(figsize=(10, 6))
-                    plt.bar(bins[:-1], hist, width=np.diff(bins), align='edge', alpha=0.7,
-                            label='Histogram')
+            # Visualize the fit if debug is enabled
+            if debug:
+                plt.figure(figsize=(10, 6))
+                plt.bar(bins[:-1], hist, width=np.diff(bins), align='edge', alpha=0.7,
+                        label='Histogram')
 
-                    # Plot the fitted Gaussian over a finer grid
-                    x_fine = np.linspace(bins[min_idx], bins[max_idx+1], 100)
-                    plt.plot(x_fine, gaussian(x_fine, *popt), 'r-', linewidth=2,
-                                label=f'Gaussian fit (μ={mean:.2f}, σ={std_dev:.2f})')
+                # Plot the fitted Gaussian over a finer grid
+                x_fine = np.linspace(bins[min_idx], bins[max_idx+1], 100)
+                plt.plot(x_fine, gaussian(x_fine, *popt), 'r-', linewidth=2,
+                            label=f'Gaussian fit (μ={mean:.2f}, σ={std_dev:.2f})')
 
-                    plt.axvline(x=mean, color='g', linestyle='--',
-                                label=f'Mean = {mean:.2f}')
+                plt.axvline(x=mean, color='g', linestyle='--',
+                            label=f'Mean = {mean:.2f}')
 
-                    plt.title(f"{'Horizontal' if direction == 0 else 'Vertical'} Gaussian Fit")
-                    plt.xlabel("Distance (pixels)")
-                    plt.ylabel("Frequency")
-                    plt.legend()
-                    plt.xlim(bins[min_idx] - 2, bins[max_idx+1] + 2)
-                    plt.grid(alpha=0.3)
-                    plt.show()
+                plt.title(f"{'Horizontal' if direction == 0 else 'Vertical'} Gaussian Fit")
+                plt.xlabel("Distance (pixels)")
+                plt.ylabel("Frequency")
+                plt.legend()
+                plt.xlim(bins[min_idx] - 2, bins[max_idx+1] + 2)
+                plt.grid(alpha=0.3)
+                plt.show()
 
-                # Store mean and standard deviation
-                results.extend([mean, std_dev])
-            except Exception as e:
-                print(f"Gaussian fitting failed: {e}")
-                # Fall back to simple estimate
-                results.extend([simple_estimate, 1.0])
+            # Store mean and standard deviation
+            results.extend([mean, std_dev])
         else:
             # Not enough data points for fitting, use simple estimate
+            print(f"Not enough data points for fitting gaussian in {'horizontal' if direction == 0 else 'vertical'} direction. Using simple estimate.")
             results.extend([simple_estimate, 1.0])
 
     return results[0], results[2], results[1], results[3]   # pixel width, pixel height, std_dev_w, std_dev_h
 
 
-def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, std_dev_w: float, std_dev_h: float) -> tuple[list[int], list[int]]:
+def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, _std_dev_w: float, _std_dev_h: float) -> tuple[list[int], list[int], np.ndarray]:
     """
     Refine the grid detection by finding the best alignment of horizontal and vertical lines.
 
@@ -159,38 +155,32 @@ def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, std_dev_w: float, s
     edges = _multi_channel_sobel(img)
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))   # Denoise
 
-    # Define parameters for both directions
-    directions = [
-        {   # Horizontal lines (x is constant)
-            'edge_img': edges,
-            'step': pix_h,          # Gap between two horizontal lines = pixel height
-            'std_dev': std_dev_h,
-            'result': []
-        },
-        {
-            'edge_img': cv2.flip(cv2.transpose(edges), 0),
-            'step': pix_w,
-            'std_dev': std_dev_w,
-            'result': []
-        }
-    ]
+    results: tuple[list[int], list[int]] = ([], [])  # Horizontal and vertical results
 
-    # Process both directions with the same code
-    for direction in directions:
-        edge_img = direction['edge_img']
-        avg_step = direction['step']
+    for dir in (0,1):   # Horizontal, Vertical
+        if dir == 0:
+            edge_img = edges
+            avg_step = pix_h    # Gap between two horizontal lines = pixel height
+        else:
+            edge_img = cv2.transpose(edges)
+            avg_step = pix_w
+
         # std_dev = direction['std_dev']
-        search_range = int(avg_step * 0.333)
+        search_range_basic = int(avg_step * 0.6 / 2.0)
+        empty_run_len = 0
 
         pos = 0
         while pos < edge_img.shape[0]:  # Loop through the image dimension
-            direction['result'].append(pos)
+            results[dir].append(pos)
 
             expected_pos = pos + int(avg_step)
             best_score = 0.0
             best_pos = expected_pos
 
-            for p_cand in range(expected_pos - search_range, expected_pos + search_range + 1):
+            empty_steps_taken = float(empty_run_len) / avg_step
+            search_range = min(avg_step/2.0, search_range_basic * (1 + empty_steps_taken/6.0))
+
+            for p_cand in range(expected_pos - int(search_range+0.5), expected_pos + int(search_range+0.5) + 1):
                 if p_cand >= edge_img.shape[0] or p_cand < 0:
                     continue
 
@@ -205,25 +195,26 @@ def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, std_dev_w: float, s
                     best_score = float(score)
                     best_pos = p_cand
 
+                # Track how many empty pixels we have seen in a row
+                if score < 0.001 * len(edge_img[p_cand]):
+                    empty_run_len += 1
+                else:
+                    empty_run_len = 0
+
             pos = best_pos
 
     # Return horizontal and vertical gridlines
-    return directions[0]['result'], directions[1]['result']
+    return results[0], results[1], edges
 
 
-def _multi_channel_sobel(image):
+def _multi_channel_sobel(image: np.ndarray) -> np.ndarray:
     """
     Apply Sobel filter to each channel of the image - including alpha - and combine the results.
     This highlights edges while reducing noise.
     """
-    # Handle both color and grayscale images
-    if len(image.shape) == 2:
-        channels = [image]  # Already grayscale
-    else:
-        channels = cv2.split(image)  # Split into individual channels
+    channels = cv2.split(image)  # Split into individual channels
 
     channel_magnitudes = []
-
     for channel in channels:
         sobelx = cv2.Sobel(channel, cv2.CV_64F, 1, 0, ksize=3)
         sobely = cv2.Sobel(channel, cv2.CV_64F, 0, 1, ksize=3)

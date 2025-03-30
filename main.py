@@ -6,7 +6,9 @@ Processes scaled-up, possibly squeezed pixel art with JPEG artifacts and noise,
 restoring it to its original resolution.
 
 If the image has an alpha channel, it is by default assumed to be a sprite sheet
-and will be segmented into individual sprites.
+and will be segmented into individual sprites. Grid is fine tuned for each sprite,
+so the program can also handle images where the sprites are not precisely aligned
+to a commong pixel grid - as long as their pixels are the roughly the same.
 
 The program uses bilateral filtering to reduce noise, estimates the pixel grid,
 segments the image into sprites, and restores each sprite to its original pixel size,
@@ -103,7 +105,7 @@ def main() -> None:
         print("Skipping sprite segmentation, processing the entire image")
     else:
         min_size = int((pix_w * pix_w) * args.min_sprite_size)
-        print(f"Minimum sprite size threshold: {min_size} pixels")
+        print(f"Minimum sprite size threshold: {min_size} pixels (before scaledown)")
 
         sprite_regions = segment_sprites(cleaned_alpha, min_size)
         print(f"Detected {len(sprite_regions)} sprites")
@@ -112,7 +114,6 @@ def main() -> None:
             segment_sprites_img = img.copy()
             for region in sprite_regions:
                 y1, y2, x1, x2 = region
-                print(region)
                 cv2.rectangle(segment_sprites_img, (x1, y1), (x2, y2), (0, 255, 0, 255), 1)
             cv2.imwrite(str(debug_dir / "02_segmented.png"), segment_sprites_img)
 
@@ -127,13 +128,14 @@ def main() -> None:
         y1, y2, x1, x2 = region
         sprite = img[y1:y2, x1:x2].copy()
 
-        h_lines, v_lines = refine_grid(sprite, pix_w, pix_h, w_std, h_std)
+        h_lines, v_lines, edges_img = refine_grid(sprite, pix_w, pix_h, w_std, h_std)
 
         # Visualize the detected grid
         if debug_dir:
             cv2.imwrite(str(debug_dir / f"03_sprite_{i}.png"), sprite)
 
             # Standard grid visualization
+            #edges_img = cv2.cvtColor(edges_img, cv2.COLOR_GRAY2BGRA)
             grid_vis = visualize_grid(sprite, pix_w, pix_h, h_lines, v_lines)
             cv2.imwrite(str(debug_dir / f"03_grid_visualization_{i}.png"), grid_vis)
 
@@ -143,13 +145,11 @@ def main() -> None:
             # Visualize the restored sprite in (near) original resolution
             mean_pix_w = int(np.mean(np.diff(v_lines)) + 0.5)
             mean_pix_h = int(np.mean(np.diff(h_lines)) + 0.5)
-            print("Mean pixel size: ", mean_pix_w, mean_pix_h)
             upscaled_sprite = cv2.resize(
                 restored_sprite,
                 (mean_pix_w*len(v_lines), mean_pix_h*len(h_lines)),
                 interpolation=cv2.INTER_NEAREST
             )
-            print("upscaled_sprite sprite shape: ", upscaled_sprite.shape)
             cv2.imwrite(str(debug_dir / f"04_restored_sprite_{i}.png"), upscaled_sprite)
 
         # Save individual sprite
