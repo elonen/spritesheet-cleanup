@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """
-Pixel Art Restoration Tool - Main Entry Point
+Pixel Art Restoration Tool
 
-This script processes scaled-up pixel art with JPEG artifacts and noise,
-restoring it to its original pixelated style and resolution.
+Processes scaled-up, possibly squeezed pixel art with JPEG artifacts and noise,
+restoring it to its original resolution.
+
+If the image has an alpha channel, it is by default assumed to be a sprite sheet
+and will be segmented into individual sprites.
+
+The program uses bilateral filtering to reduce noise, estimates the pixel grid,
+segments the image into sprites, and restores each sprite to its original pixel size,
+using median color for each pixel.
 """
 
 import argparse
@@ -13,20 +20,37 @@ import cv2
 import numpy as np
 
 from alpha_processing import clean_alpha_channel
-from grid_detection import detect_grid_parameters
+from grid_detection import estimate_grid_size, refine_grid
 from sprite_segmentation import segment_sprites
-from pixel_restoration import restore_pixelated_style
+from pixel_restoration import restore_smallscale_image
+from grid_visualization import visualize_grid
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Restore scaled-up pixelated images")
     parser.add_argument("input_path", type=str, help="Path to the input image")
     parser.add_argument("output_path", type=str, help="Path to save the output image")
+
     parser.add_argument("--scale", type=float, default=None,
                         help="Known scale factor (if available)")
-    parser.add_argument("--min-size-factor", type=float, default=0.75,
-                        help="Minimum sprite size as a factor of pixel size squared")
-    parser.add_argument("--sample-area", type=float, default=0.25,
-                        help="Fraction of the image to sample for preliminary grid detection")
+
+    parser.add_argument("--min-sprite-size", type=float, default=2.0,
+                        help="For segmenting sprites, minimum size of sprite in pixels after restoration")
+
+    parser.add_argument("--pixel-w-guess", type=float, default=None,
+                        help="Initial guess for pixel width")
+    parser.add_argument("--pixel-h-guess", type=float, default=None,
+                        help="Initial guess for pixel height")
+    parser.add_argument("--pixel-w-slop", type=float, default=0.5,
+                        help="Multiplier for pixel width guess. Deviations larger than this will be discarded.")
+    parser.add_argument("--pixel-h-slop", type=float, default=0.5,
+                        help="Multiplier for pixel height guess. Deviations larger than this will be discarded.")
+
+    parser.add_argument("--no-segment", action="store_true",
+                        help="Skip sprite segmentation, restore the entire image")
+
+    parser.add_argument("--bilateral-filter", action="store_true",
+                        help="Apply bilateral noise filter")
     parser.add_argument("--debug", action="store_true",
                         help="Save intermediate images for debugging")
 
@@ -37,6 +61,12 @@ def main() -> None:
     if img is None:
         print(f"Error: Could not load image from {args.input_path}")
         return
+    print(f"Loaded image with shape {img.shape}")
+
+    # Apply bilateral filter to each channel to reduce noise
+    if args.bilateral_filter:
+        for i in range(img.shape[2]):
+            img[:, :, i] = cv2.bilateralFilter(img[:, :, i], d=5, sigmaColor=75, sigmaSpace=75)
 
     # Check if the image has an alpha channel, add one if it doesn't
     if img.shape[2] == 3:
@@ -46,9 +76,8 @@ def main() -> None:
     else:
         alpha = img[:, :, 3].copy()
 
-    print(f"Loaded image with shape {img.shape}")
 
-    # Step 1: Clean up the alpha channel
+    # Clean the alpha channel to remove noise
     cleaned_alpha = clean_alpha_channel(alpha)
     img[:, :, 3] = cleaned_alpha
 
@@ -59,83 +88,75 @@ def main() -> None:
         cv2.imwrite(str(debug_dir / "01_cleaned_alpha.png"), cleaned_alpha)
         cv2.imwrite(str(debug_dir / "01_image_with_cleaned_alpha.png"), img)
 
-    # Step 1.5: Preliminary grid detection on a sample area
-    sample_size = int(min(img.shape[0], img.shape[1]) * args.sample_area)
-    center_y, center_x = img.shape[0] // 2, img.shape[1] // 2
-    sample_y1 = max(0, center_y - sample_size // 2)
-    sample_y2 = min(img.shape[0], center_y + sample_size // 2)
-    sample_x1 = max(0, center_x - sample_size // 2)
-    sample_x2 = min(img.shape[1], center_x + sample_size // 2)
 
-    sample_img = img[sample_y1:sample_y2, sample_x1:sample_x2].copy()
+    # Estimate pixel size for the entire image
+    pix_w, pix_h, w_std, h_std = estimate_grid_size(img, debug=args.debug,
+        w_guess=args.pixel_w_guess, h_guess=args.pixel_h_guess,
+        w_slop_mult=args.pixel_w_slop, h_slop_mult=args.pixel_h_slop)
 
-    if debug_dir:
-        cv2.imwrite(str(debug_dir / "01_5_sample_area.png"), sample_img)
+    print(f"Estimated global pixel size: {pix_w:.1f} x {pix_h:.1f} pixels")
 
-    # Detect grid parameters from the sample
-    pixel_size = args.scale if args.scale is not None else detect_grid_parameters(sample_img)
-    print(f"Estimated pixel size: {pixel_size}")
 
-    # Step 2 & 3: Segment sprites using the minimum size derived from pixel size
-    min_size = int((pixel_size * pixel_size) * args.min_size_factor)
-    print(f"Minimum sprite size threshold: {min_size} pixels")
+    # Segment sprites using the minimum size derived from estimated pixel size
+    if args.no_segment:
+        sprite_regions = [(0, img.shape[0], 0, img.shape[1])]
+        print("Skipping sprite segmentation, processing the entire image")
+    else:
+        min_size = int((pix_w * pix_w) * args.min_sprite_size)
+        print(f"Minimum sprite size threshold: {min_size} pixels")
 
-    sprite_regions = segment_sprites(cleaned_alpha, min_size)
-    print(f"Detected {len(sprite_regions)} sprites")
+        sprite_regions = segment_sprites(cleaned_alpha, min_size)
+        print(f"Detected {len(sprite_regions)} sprites")
+
+        if debug_dir:
+            segment_sprites_img = img.copy()
+            for region in sprite_regions:
+                y1, y2, x1, x2 = region
+                print(region)
+                cv2.rectangle(segment_sprites_img, (x1, y1), (x2, y2), (0, 255, 0, 255), 1)
+            cv2.imwrite(str(debug_dir / "02_segmented.png"), segment_sprites_img)
+
 
     # Create output directory if it doesn't exist
     output_dir = Path(args.output_path).parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 4 & 5: Process each sprite, restore pixelated style, and save
-    processed_sprites = []
 
+    # Process each sprite, restore it to original pixel size, and save
     for i, region in enumerate(sprite_regions):
         y1, y2, x1, x2 = region
         sprite = img[y1:y2, x1:x2].copy()
 
+        h_lines, v_lines = refine_grid(sprite, pix_w, pix_h, w_std, h_std)
+
+        # Visualize the detected grid
         if debug_dir:
             cv2.imwrite(str(debug_dir / f"03_sprite_{i}.png"), sprite)
 
-        # Detect pixel grid more precisely for this specific sprite
-        sprite_pixel_size = detect_grid_parameters(sprite, pixel_size)
+            # Standard grid visualization
+            grid_vis = visualize_grid(sprite, pix_w, pix_h, h_lines, v_lines)
+            cv2.imwrite(str(debug_dir / f"03_grid_visualization_{i}.png"), grid_vis)
 
-        # Restore pixelated style
-        restored_sprite = restore_pixelated_style(sprite, sprite_pixel_size)
-
-        if debug_dir:
-            cv2.imwrite(str(debug_dir / f"04_restored_sprite_{i}.png"), restored_sprite)
-
-        # Scale down to original resolution
-        original_height = max(1, int((y2 - y1) / sprite_pixel_size + 0.5))
-        original_width = max(1, int((x2 - x1) / sprite_pixel_size + 0.5))
-
-        scaled_sprite = cv2.resize(
-            restored_sprite,
-            (original_width, original_height),
-            interpolation=cv2.INTER_NEAREST
-        )
+        restored_sprite = restore_smallscale_image(sprite, h_lines, v_lines)
 
         if debug_dir:
-            cv2.imwrite(str(debug_dir / f"05_scaled_sprite_{i}.png"), scaled_sprite)
+            # Visualize the restored sprite in (near) original resolution
+            mean_pix_w = int(np.mean(np.diff(v_lines)) + 0.5)
+            mean_pix_h = int(np.mean(np.diff(h_lines)) + 0.5)
+            print("Mean pixel size: ", mean_pix_w, mean_pix_h)
+            upscaled_sprite = cv2.resize(
+                restored_sprite,
+                (mean_pix_w*len(v_lines), mean_pix_h*len(h_lines)),
+                interpolation=cv2.INTER_NEAREST
+            )
+            print("upscaled_sprite sprite shape: ", upscaled_sprite.shape)
+            cv2.imwrite(str(debug_dir / f"04_restored_sprite_{i}.png"), upscaled_sprite)
 
         # Save individual sprite
         sprite_filename = f"{Path(args.output_path).stem}_sprite_{i}.png"
         sprite_path = os.path.join(output_dir, sprite_filename)
-        cv2.imwrite(sprite_path, scaled_sprite)
+        cv2.imwrite(sprite_path, restored_sprite)
 
-        processed_sprites.append({
-            "sprite": scaled_sprite,
-            "original_position": (x1, y1, x2, y2),
-            "scaled_position": (
-                int(x1 / sprite_pixel_size),
-                int(y1 / sprite_pixel_size),
-                int(x2 / sprite_pixel_size),
-                int(y2 / sprite_pixel_size)
-            )
-        })
-
-    print(f"Successfully processed {len(processed_sprites)} sprites")
     print(f"Sprites saved to {output_dir}")
 
 if __name__ == "__main__":
