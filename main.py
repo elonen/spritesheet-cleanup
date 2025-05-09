@@ -15,7 +15,6 @@ segments the image into sprites, and restores each sprite to its original pixel 
 using median color for each pixel.
 """
 
-import os
 from pathlib import Path
 import click
 import cv2
@@ -23,6 +22,7 @@ import numpy as np
 
 from alpha_processing import clean_alpha_channel
 from grid_detection import estimate_grid_size, refine_grid
+from sprite_save import save_sprites
 from sprite_segmentation import segment_sprites
 from pixel_restoration import restore_smallscale_image
 from grid_visualization import visualize_grid
@@ -41,10 +41,12 @@ from grid_visualization import visualize_grid
               help='Multiplier for pixel height guess tolerance')
 @click.option('--no-segment', '-n', is_flag=True, help='Skip sprite segmentation, restore the entire image')
 @click.option('--bilateral-filter', '-b', is_flag=True, help='Apply bilateral noise filter')
+@click.option('--spritesheet', '-s', is_flag=True,
+              help='Create a single spritesheet instead of individual files')
 @click.option('--debug', '-d', is_flag=True, help='Save intermediate images for debugging')
 def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_guess: float | None,
          pixel_h_guess: float | None, pixel_w_slop: float, pixel_h_slop: float,
-         no_segment: bool, bilateral_filter: bool, debug: bool) -> None:
+         no_segment: bool, bilateral_filter: bool, spritesheet: bool, debug: bool) -> None:
     """Restore scaled-up, noisy, distorted pixel images to their original (lower) resolution.
 
     If the image has an alpha channel, it is assumed to be a sprite sheet and will by default
@@ -116,11 +118,8 @@ def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_gues
                 cv2.rectangle(segment_sprites_img, (x1, y1), (x2, y2), (0, 255, 0, 255), 1)
             cv2.imwrite(str(debug_dir / "02_segmented.png"), segment_sprites_img)
 
-    # Create output directory if it doesn't exist
-    output_dir = Path(output_path).parent
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Process each sprite, restore it to original pixel size, and save
+    # Process each sprite, restore it to original pixel size
+    restored_sprites = []
     for i, region in enumerate(sprite_regions):
         y1, y2, x1, x2 = region
         sprite = img[y1:y2, x1:x2].copy()
@@ -135,7 +134,9 @@ def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_gues
             cv2.imwrite(str(debug_dir / f"03_grid_visualization_{i}.png"), grid_vis)
 
         restored_sprite = restore_smallscale_image(sprite, h_lines, v_lines)
+        restored_sprites.append(restored_sprite)
 
+        # Debug visualization of the restored sprite
         if debug_dir:
             # Visualize the restored sprite in (near) original resolution
             mean_pix_w = int(np.mean(np.diff(v_lines)) + 0.5)
@@ -147,12 +148,18 @@ def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_gues
             )
             cv2.imwrite(str(debug_dir / f"04_restored_sprite_{i}.png"), upscaled_sprite)
 
-        # Save individual sprite
-        sprite_filename = f"{Path(output_path).stem}_sprite_{i}.png"
-        sprite_path = os.path.join(output_dir, sprite_filename)
-        cv2.imwrite(sprite_path, restored_sprite)
+    # Save sprites using the new function
+    save_sprites(
+        restored_sprites,
+        output_path,
+        create_sheet=spritesheet,
+        debug_dir=debug_dir
+    )
 
-    click.echo(f"Sprites saved to {output_dir}")
+    if spritesheet:
+        click.echo(f"Spritesheet saved to {Path(output_path).parent}")
+    else:
+        click.echo(f"Sprites saved to {Path(output_path).parent}")
 
 
 if __name__ == "__main__":
