@@ -2,6 +2,7 @@
 debug/
 input/
 output/
+_venv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

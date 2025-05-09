@@ -2,11 +2,10 @@
 Functions for segmenting sprites in a sprite sheet.
 """
 
-from typing import List, Tuple
 import cv2
 import numpy as np
 
-def segment_sprites(alpha: np.ndarray, min_size: int) -> List[Tuple[int, int, int, int]]:
+def segment_sprites(alpha: np.ndarray, min_size: int) -> list[tuple[int, int, int, int]]:
     """
     Segment individual sprites from a sprite sheet using the alpha channel.
 

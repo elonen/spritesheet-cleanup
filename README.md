@@ -1,6 +1,10 @@
 # Pixel Art Restoration Tool
 
-Restores scaled-up, possibly distorted pixel art with noise and JPEG artifacts back to its original resolution. The tool detects the original pixel grid pattern, segments individual sprites, and rebuilds the image with the correct pixel art style.
+Restores a scaled-up, possibly distorted pixel art with noise and JPEG artifacts back to its original resolution. Works well for cleaning up sloppy edits in a highres image editor and AI generations.
+
+The tool detects the original pixel grid pattern, segments individual sprites, and rebuilds the image with the intended "native" pixel resolution.
+
+If the results are not as expected, you can use `--debug` to output visualizations of intermediate processing step to help troubleshoot.
 
 ## Features
 
@@ -12,6 +16,8 @@ Restores scaled-up, possibly distorted pixel art with noise and JPEG artifacts b
 
 ## Installation
 
+### Standard Installation
+
 ```bash
 # Create and activate a virtual environment
 python -m venv _venv
@@ -19,12 +25,15 @@ source _venv/bin/activate  # On Windows: _venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install the package in development mode (recommended)
+pip install -e .
 ```
 
 ## Usage
 
 ```bash
-python main.py INPUT_PATH OUTPUT_PATH [OPTIONS]
+spritesheet-cleanup INPUT_PATH OUTPUT_PATH [OPTIONS]
 ```
 
 ### Arguments
@@ -46,6 +55,10 @@ python main.py INPUT_PATH OUTPUT_PATH [OPTIONS]
 
 ### Basic Usage
 ```bash
+# If using the installed command
+spritesheet-cleanup scaled_up_sprite.png output/restored
+
+# Or with the script directly
 _venv/bin/python main.py scaled_up_sprite.png output/restored
 ```
 
@@ -54,36 +67,52 @@ _venv/bin/python main.py scaled_up_sprite.png output/restored
 Here's an example of the tool in action:
 
 ```bash
-_venv/bin/python main.py -s example-input.png example-output.png
+spritesheet-cleanup -s example-input.png example-output.png
 ```
 
 | Input Image | Output Spritesheet |
 |-------------|-------------------|
-| ![Input Image](example-input.png) | ![Output Spritesheet](example-output_spritesheet.png) |
+| ![Input Image](examples/example-input.png) | ![Output Spritesheet](examples/example-output_spritesheet.png) |
 
-### Restoration with Noise Reduction
-```bash
-_venv/bin/python main.py noisy_sprite.png output/cleaned --bilateral-filter
-```
+Flexible vs. naive grid:
 
-### Process as Single Image (No Segmentation)
+![Grid Viz](examples/debug_grid_visualization.png)
+![Restored](examples/example_restored.png)
+
+The tool doesn't attempt any palette reduction, so if the image is very noisy (like the example), you may get some unwanted color variations in supposedly unform areas. In that case, you can additionally try `--bilateral-filter`, though it won't always help.
+
+### Process as Single Image (no segmentation)
+
+Use this if your image is a single picture instead of a sprite sheet.
+
 ```bash
-_venv/bin/python main.py pixel_art.png output/restored --no-segment
+spritesheet-cleanup pixel_art.png output/restored --no-segment
 ```
 
 ### Create a Spritesheet
 ```bash
-_venv/bin/python main.py sprite_sheet.png output/restored --spritesheet
+spritesheet-cleanup sprite_sheet.png output/restored --spritesheet
 ```
+
+Otherwise each segmented sprite will be saved in a separate PNG.
+
 
 ### With Debugging Information
 ```bash
-_venv/bin/python main.py sprite_sheet.png output/restored --debug
+spritesheet-cleanup sprite_sheet.png output/restored --debug
 ```
 
+This option saves intermediate image files to `debug/` and shows histograms like this:
+
+![Input Image](examples/debug_pixdist.png)
+![Input Image](examples/debug_pixsize_gaussian.png)
+
 ### With Manual Grid Size Hints
+
+This may be necessary if apparent pixel sizes vary too much for the autodetection to work well.
+
 ```bash
-_venv/bin/python main.py sprite_sheet.png output/restored --pixel-w-guess 8.5 --pixel-h-guess 8.5
+spritesheet-cleanup sprite_sheet.png output/restored --pixel-w-guess 8.5 --pixel-h-guess 8.5
 ```
 
 ## How It Works

@@ -20,12 +20,12 @@ import click
 import cv2
 import numpy as np
 
-from alpha_processing import clean_alpha_channel
-from grid_detection import estimate_grid_size, refine_grid
-from sprite_save import save_sprites
-from sprite_segmentation import segment_sprites
-from pixel_restoration import restore_smallscale_image
-from grid_visualization import visualize_grid
+from pixelart.alpha_processing import clean_alpha_channel
+from pixelart.grid_detection import estimate_grid_size, refine_grid
+from pixelart.sprite_save import save_sprites
+from pixelart.sprite_segmentation import segment_sprites
+from pixelart.pixel_restoration import restore_smallscale_image
+from pixelart.grid_visualization import visualize_grid
 
 
 @click.command(context_settings=dict(show_default=True))

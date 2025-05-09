@@ -4,10 +4,9 @@ Functions for visualizing the detected grid on images.
 
 import cv2
 import numpy as np
-from typing import List, Optional
 
-def visualize_grid(img: np.ndarray, est_pixel_w: float, est_pixel_h: float, h_lines: List[int], v_lines: List[int],
-                  output_path: Optional[str] = None) -> np.ndarray:
+def visualize_grid(img: np.ndarray, est_pixel_w: float, est_pixel_h: float, h_lines: list[int], v_lines: list[int],
+                  output_path: str|None = None) -> np.ndarray:
     """
     Visualize the detected grid by overlaying magenta lines on the image.
 
