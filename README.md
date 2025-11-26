@@ -32,15 +32,17 @@ pip install -e .
 
 ## Usage
 
+### Command Line Interface
+
 ```bash
 spritesheet-cleanup INPUT_PATH OUTPUT_PATH [OPTIONS]
 ```
 
-### Arguments
+**Arguments:**
 - `INPUT_PATH`: Path to the input image file
 - `OUTPUT_PATH`: Path where output images will be saved
 
-### Options
+**Options:**
 - `--min-sprite-size, -m FLOAT`: Minimum size of sprite after restoration (default: 2.0)
 - `--pixel-w-guess, -w FLOAT`: Initial guess for pixel width
 - `--pixel-h-guess, -h FLOAT`: Initial guess for pixel height
@@ -50,6 +52,50 @@ spritesheet-cleanup INPUT_PATH OUTPUT_PATH [OPTIONS]
 - `--bilateral-filter, -b`: Apply bilateral noise filter
 - `--spritesheet, -s`: Create a single spritesheet instead of individual files
 - `--debug, -d`: Save intermediate images for debugging
+
+### Python API
+
+The tool can also be used as a library in your Python code:
+
+```python
+import cv2
+from pixelart import process_spritesheet
+
+# Load image as numpy array
+image = cv2.imread("spritesheet.png", cv2.IMREAD_UNCHANGED)
+
+# Process and iterate through results
+for result in process_spritesheet(image):
+    if result.is_debug:
+        # Debug images (only if debug=True)
+        print(f"Debug: {result.name}")
+    else:
+        # Final restored sprites
+        print(f"Sprite: {result.name}")
+        print(f"  Size: {result.image.shape}")
+        print(f"  Bbox: {result.bbox}")  # (y1, y2, x1, x2) in original image
+        cv2.imwrite(f"{result.name}.png", result.image)
+```
+
+**Key features:**
+- **Generator pattern**: Yields images as they're produced (memory efficient)
+- **Raw numpy arrays**: Works with `cv2.imread()` output directly
+- **Coordinate tracking**: Each sprite includes its original bounding box
+- **Debug streaming**: Set `debug=True` to get intermediate processing images
+- **All CLI options available**: Same parameters as command line
+
+**Example with options:**
+```python
+for result in process_spritesheet(
+    image,
+    bilateral_filter=True,
+    no_segment=False,
+    min_sprite_size=2.0,
+    debug=True
+):
+    # Handle images as needed
+    pass
+```
 
 ## Examples
 
