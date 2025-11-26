@@ -37,10 +37,10 @@ dev = [
 ]
 
 [project.scripts]
-spritesheet-cleanup = "pixelart.main:main"
+spritesheet-cleanup = "spritesheet_cleanup.main:main"
 
 [tool.setuptools.packages.find]
-include = ["pixelart*"]
+include = ["spritesheet_cleanup*"]
 exclude = ["input*", "debug*", "output*", "examples*", "tests*"]
 
 [tool.mypy]

@@ -1,5 +1,5 @@
 """
-End-to-end tests for the pixelart library API.
+End-to-end tests for the spritesheet_cleanup library API.
 
 Tests that the library can be used programmatically to process images
 without using the CLI.
@@ -10,7 +10,7 @@ import cv2
 import pytest
 from pathlib import Path
 
-from pixelart import process_spritesheet, ProcessedImage
+from spritesheet_cleanup import process_spritesheet, ProcessedImage
 
 
 def test_process_spritesheet_basic():

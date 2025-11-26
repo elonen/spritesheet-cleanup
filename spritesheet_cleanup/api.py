@@ -15,11 +15,11 @@ from typing import Generator
 import cv2
 import numpy as np
 
-from pixelart.alpha_processing import clean_alpha_channel
-from pixelart.grid_detection import estimate_grid_size, refine_grid
-from pixelart.sprite_segmentation import segment_sprites
-from pixelart.pixel_restoration import restore_smallscale_image
-from pixelart.grid_visualization import visualize_grid
+from spritesheet_cleanup.alpha_processing import clean_alpha_channel
+from spritesheet_cleanup.grid_detection import estimate_grid_size, refine_grid
+from spritesheet_cleanup.sprite_segmentation import segment_sprites
+from spritesheet_cleanup.pixel_restoration import restore_smallscale_image
+from spritesheet_cleanup.grid_visualization import visualize_grid
 
 
 @dataclass
@@ -115,7 +115,7 @@ def process_spritesheet(
 
     Example:
         >>> import cv2
-        >>> from pixelart import process_spritesheet
+        >>> from spritesheet_cleanup import process_spritesheet
         >>>
         >>> # Load an image
         >>> img = cv2.imread("spritesheet.png", cv2.IMREAD_UNCHANGED)

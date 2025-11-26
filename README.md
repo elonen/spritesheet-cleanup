@@ -61,7 +61,7 @@ The tool can also be used as a library in your Python code:
 
 ```python
 import cv2
-from pixelart import process_spritesheet
+from spritesheet_cleanup import process_spritesheet
 
 # Load image as numpy array
 image = cv2.imread("spritesheet.png", cv2.IMREAD_UNCHANGED)

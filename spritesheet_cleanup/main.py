@@ -19,8 +19,8 @@ from pathlib import Path
 import click
 import cv2
 
-from pixelart.api import process_spritesheet
-from pixelart.sprite_save import save_sprites
+from spritesheet_cleanup.api import process_spritesheet
+from spritesheet_cleanup.sprite_save import save_sprites
 
 
 @click.command(context_settings=dict(show_default=True))
