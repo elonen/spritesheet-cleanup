@@ -43,6 +43,9 @@ spritesheet-cleanup = "spritesheet_cleanup.main:main"
 include = ["spritesheet_cleanup*"]
 exclude = ["input*", "debug*", "output*", "examples*", "tests*"]
 
+[tool.setuptools.package-data]
+spritesheet_cleanup = ["py.typed"]
+
 [tool.mypy]
 python_version = "3.12"
 
