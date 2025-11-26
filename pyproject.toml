@@ -31,6 +31,12 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/elonen/spritesheet-cleanup"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "mypy>=1.0",
+]
+
 [project.scripts]
 spritesheet-cleanup = "pixelart.main:main"
 
@@ -38,5 +44,5 @@ spritesheet-cleanup = "pixelart.main:main"
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = ["cv2", "cv2.*", "matplotlib", "matplotlib.*", "scipy", "scipy.*", "click", "setuptools"]
+module = ["cv2", "cv2.*", "matplotlib", "matplotlib.*", "scipy", "scipy.*", "click", "setuptools", "numpy", "numpy.*", "pytest", "pytest.*"]
 ignore_missing_imports = true
