@@ -10,11 +10,10 @@ readme = "README.md"
 authors = [
     {name = "Jarno Elonen", email = "elonen@iki.fi"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 keywords = ["pixel-art", "sprite", "restoration"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Multimedia :: Graphics",
     "Development Status :: 4 - Beta",
@@ -39,6 +38,10 @@ dev = [
 
 [project.scripts]
 spritesheet-cleanup = "pixelart.main:main"
+
+[tool.setuptools.packages.find]
+include = ["pixelart*"]
+exclude = ["input*", "debug*", "output*", "examples*", "tests*"]
 
 [tool.mypy]
 python_version = "3.12"
