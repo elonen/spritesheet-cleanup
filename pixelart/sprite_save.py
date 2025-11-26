@@ -3,6 +3,8 @@
 Functions for saving pixel art sprites as individual images or as a spritesheet.
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 import cv2

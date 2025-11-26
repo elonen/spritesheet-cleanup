@@ -21,6 +21,7 @@ def segment_sprites(alpha: np.ndarray, min_size: int) -> list[tuple[int, int, in
 
     # Find connected components
     num_labels, _labels, stats, _centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    stats = np.asarray(stats)  # Type hint for mypy
 
     # Filter components by size and extract bounding boxes
     sprite_regions = []

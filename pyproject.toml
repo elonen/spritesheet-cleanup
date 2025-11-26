@@ -1,3 +1,42 @@
 [build-system]
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "spritesheet-cleanup"
+version = "0.1.0"
+description = "Pixel Art Restoration Tool"
+readme = "README.md"
+authors = [
+    {name = "Jarno Elonen", email = "elonen@iki.fi"}
+]
+license = {text = "MIT"}
+keywords = ["pixel-art", "sprite", "restoration"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Graphics",
+    "Development Status :: 4 - Beta",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "click",
+]
+
+[project.urls]
+Homepage = "https://github.com/elonen/spritesheet-cleanup"
+
+[project.scripts]
+spritesheet-cleanup = "pixelart.main:main"
+
+[tool.mypy]
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*", "matplotlib", "matplotlib.*", "scipy", "scipy.*", "click", "setuptools"]
+ignore_missing_imports = true
