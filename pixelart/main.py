@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pixel Art Restoration Tool
+Pixel Art Restoration Tool - Command Line Interface
 
 Processes scaled-up, possibly squeezed pixel art with JPEG artifacts and noise,
 restoring it to its original resolution.
@@ -18,14 +18,9 @@ using median color for each pixel.
 from pathlib import Path
 import click
 import cv2
-import numpy as np
 
-from pixelart.alpha_processing import clean_alpha_channel
-from pixelart.grid_detection import estimate_grid_size, refine_grid
+from pixelart.api import process_spritesheet
 from pixelart.sprite_save import save_sprites
-from pixelart.sprite_segmentation import segment_sprites
-from pixelart.pixel_restoration import restore_smallscale_image
-from pixelart.grid_visualization import visualize_grid
 
 
 @click.command(context_settings=dict(show_default=True))
@@ -68,92 +63,55 @@ def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_gues
         return
     click.echo(f"Loaded image with shape {img.shape}")
 
-    # Apply bilateral filter to each channel to reduce noise
-    if bilateral_filter:
-        for i in range(img.shape[2]):
-            img[:, :, i] = cv2.bilateralFilter(img[:, :, i], d=5, sigmaColor=75, sigmaSpace=75)
-
-    # Check if the image has an alpha channel, add one if it doesn't
-    if img.shape[2] == 3:
-        click.echo("No alpha channel detected, assuming the entire image is a sprite")
-        alpha = np.ones((img.shape[0], img.shape[1]), dtype=np.uint8) * 255
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
-    else:
-        alpha = img[:, :, 3].copy()
-
-    # Clean the alpha channel to remove noise
-    cleaned_alpha = clean_alpha_channel(alpha)
-    img[:, :, 3] = cleaned_alpha
-
+    # Setup debug directory if needed
     debug_dir = None
     if debug:
         debug_dir = Path("debug")
         debug_dir.mkdir(exist_ok=True)
-        cv2.imwrite(str(debug_dir / "01_cleaned_alpha.png"), cleaned_alpha)
-        cv2.imwrite(str(debug_dir / "01_image_with_cleaned_alpha.png"), img)
-        print("Debug images saved to 'debug' directory")
+        click.echo("Debug mode enabled, saving intermediate images to 'debug' directory")
 
-    # Estimate pixel size for the entire image
-    pix_w, pix_h, w_std, h_std = estimate_grid_size(img, debug=debug,
-        w_guess=pixel_w_guess, h_guess=pixel_h_guess,
-        w_slop_mult=pixel_w_slop, h_slop_mult=pixel_h_slop)
+    # Process the image using the library generator API
+    try:
+        # Collect sprites and handle debug images
+        restored_sprites = []
+        num_debug_images = 0
 
-    click.echo(f"Estimated global pixel size: {pix_w:.1f} x {pix_h:.1f} pixels")
+        for result in process_spritesheet(
+            img,
+            min_sprite_size=min_sprite_size,
+            pixel_w_guess=pixel_w_guess,
+            pixel_h_guess=pixel_h_guess,
+            pixel_w_slop=pixel_w_slop,
+            pixel_h_slop=pixel_h_slop,
+            no_segment=no_segment,
+            bilateral_filter=bilateral_filter,
+            debug=debug
+        ):
+            if result.is_debug:
+                # Save debug images to debug directory
+                if debug_dir:
+                    # Determine file extension based on number of channels
+                    debug_path = debug_dir / f"{result.name}.png"
+                    cv2.imwrite(str(debug_path), result.image)
+                    num_debug_images += 1
+            else:
+                # Collect sprites for final output
+                restored_sprites.append(result.image)
 
-    # Segment sprites using the minimum size derived from estimated pixel size
-    if no_segment:
-        sprite_regions = [(0, img.shape[0], 0, img.shape[1])]
-        click.echo("Skipping sprite segmentation, processing the entire image")
-    else:
-        min_size = int((pix_w * pix_w) * min_sprite_size)
-        click.echo(f"Minimum sprite size threshold: {min_size} pixels (before scaledown)")
+    except ValueError as e:
+        click.echo(f"Error processing image: {e}", err=True)
+        return
 
-        sprite_regions = segment_sprites(cleaned_alpha, min_size)
-        click.echo(f"Detected {len(sprite_regions)} sprites")
+    click.echo(f"Processed {len(restored_sprites)} sprite(s)")
+    if debug:
+        click.echo(f"Saved {num_debug_images} debug image(s) to {debug_dir}")
 
-        if debug_dir:
-            segment_sprites_img = img.copy()
-            for region in sprite_regions:
-                y1, y2, x1, x2 = region
-                cv2.rectangle(segment_sprites_img, (x1, y1), (x2, y2), (0, 255, 0, 255), 1)
-            cv2.imwrite(str(debug_dir / "02_segmented.png"), segment_sprites_img)
-
-    # Process each sprite, restore it to original pixel size
-    restored_sprites = []
-    for i, region in enumerate(sprite_regions):
-        y1, y2, x1, x2 = region
-        sprite = img[y1:y2, x1:x2].copy()
-
-        h_lines, v_lines, _edges_img = refine_grid(sprite, pix_w, pix_h, w_std, h_std)
-
-        # Visualize the detected grid
-        if debug_dir:
-            cv2.imwrite(str(debug_dir / f"03_sprite_{i}.png"), sprite)
-
-            grid_vis = visualize_grid(sprite, pix_w, pix_h, h_lines, v_lines)
-            cv2.imwrite(str(debug_dir / f"03_grid_visualization_{i}.png"), grid_vis)
-
-        restored_sprite = restore_smallscale_image(sprite, h_lines, v_lines)
-        restored_sprites.append(restored_sprite)
-
-        # Debug visualization of the restored sprite
-        if debug_dir:
-            # Visualize the restored sprite in (near) original resolution
-            mean_pix_w = int(np.mean(np.diff(v_lines)) + 0.5)
-            mean_pix_h = int(np.mean(np.diff(h_lines)) + 0.5)
-            upscaled_sprite = cv2.resize(
-                restored_sprite,
-                (mean_pix_w*len(v_lines), mean_pix_h*len(h_lines)),
-                interpolation=cv2.INTER_NEAREST
-            )
-            cv2.imwrite(str(debug_dir / f"04_restored_sprite_{i}.png"), upscaled_sprite)
-
-    # Save sprites using the new function
+    # Save sprites using the save function
     save_sprites(
         restored_sprites,
         output_path,
         create_sheet=spritesheet,
-        debug_dir=debug_dir
+        debug_dir=None  # Debug images already saved above
     )
 
     if spritesheet:
