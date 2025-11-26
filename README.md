@@ -16,18 +16,20 @@ If the results are not as expected, you can use `--debug` to output visualizatio
 
 ## Installation
 
-### Standard Installation
-
 ```bash
+# Clone the repository
+git clone https://github.com/elonen/spritesheet-cleanup.git
+cd spritesheet-cleanup
+
 # Create and activate a virtual environment
 python -m venv _venv
 source _venv/bin/activate  # On Windows: _venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install the package in development mode (recommended)
+# Install the package in editable mode
 pip install -e .
+
+# Or install with development dependencies (for testing and type checking)
+pip install -e ".[dev]"
 ```
 
 ## Usage
