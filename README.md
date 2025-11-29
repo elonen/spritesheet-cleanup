@@ -2,15 +2,16 @@
 
 Restores a scaled-up, possibly distorted pixel art with noise and JPEG artifacts back to its original resolution. Works well for cleaning up sloppy edits in a highres image editor and AI generations.
 
-The tool detects the original pixel grid pattern, segments individual sprites, and rebuilds the image with the intended "native" pixel resolution.
+The tool detects the original pixel grid pattern, segments individual sprites, and rebuilds the image with the intended "native" pixel resolution. Each grid rectangle in the high-resolution input image is called a **cell** — it represents a single pixel in the restored output.
 
 If the results are not as expected, you can use `--debug` to output visualizations of intermediate processing step to help troubleshoot.
 
 ## Features
 
-- **Grid Detection**: Automatically detects the original pixel grid in scaled-up pixel art
+- **Grid Detection**: Automatically detects the cell grid in scaled-up pixel art
 - **Sprite Segmentation**: Identifies and extracts individual sprites from sprite sheets
 - **Noise Reduction**: Optional bilateral filtering to reduce JPEG artifacts and noise
+- **Center Sampling**: Configurable sampling region within each cell to avoid color bleeding from edges
 - **Alpha Channel Processing**: Handles transparency and cleans up alpha channels
 - **Flexible Output**: Save as individual sprites or as a single sprite sheet
 
@@ -46,12 +47,13 @@ spritesheet-cleanup INPUT_PATH OUTPUT_PATH [OPTIONS]
 
 **Options:**
 - `--min-sprite-size, -m FLOAT`: Minimum size of sprite after restoration (default: 2.0)
-- `--pixel-w-guess, -w FLOAT`: Initial guess for pixel width
-- `--pixel-h-guess, -h FLOAT`: Initial guess for pixel height
-- `--pixel-w-slop, -ws FLOAT`: Multiplier for pixel width guess tolerance (default: 0.33)
-- `--pixel-h-slop, -hs FLOAT`: Multiplier for pixel height guess tolerance (default: 0.33)
+- `--pixel-w-guess, -w FLOAT`: Initial guess for cell width
+- `--pixel-h-guess, -h FLOAT`: Initial guess for cell height
+- `--pixel-w-slop, -ws FLOAT`: Multiplier for cell width guess tolerance (default: 0.33)
+- `--pixel-h-slop, -hs FLOAT`: Multiplier for cell height guess tolerance (default: 0.33)
 - `--no-segment, -n`: Skip sprite segmentation, restore the entire image
 - `--bilateral-filter, -b`: Apply bilateral noise filter
+- `--sample-center, -c FLOAT`: Percentage of each cell to sample from center (default: 60.0). Lower values help avoid color bleeding from cell edges. Falls back to 100% for cells too small to subdivide.
 - `--spritesheet, -s`: Create a single spritesheet instead of individual files
 - `--debug, -d`: Save intermediate images for debugging
 
@@ -93,6 +95,7 @@ for result in process_spritesheet(
     bilateral_filter=True,
     no_segment=False,
     min_sprite_size=2.0,
+    sample_center_pct=60.0,  # Sample center 60% of each cell
     debug=True
 ):
     # Handle images as needed
@@ -127,7 +130,7 @@ Flexible vs. naive grid:
 ![Grid Viz](examples/debug_grid_visualization.png)
 ![Restored](examples/example_restored.png)
 
-The tool doesn't attempt any palette reduction, so if the image is very noisy (like the example), you may get some unwanted color variations in supposedly unform areas. In that case, you can additionally try `--bilateral-filter`, though it won't always help.
+The tool doesn't attempt any palette reduction, so if the image is very noisy (like the example), you may get some unwanted color variations in supposedly uniform areas. In that case, you can try `--bilateral-filter` or reduce `--sample-center` to sample a smaller region from the center of each cell, though these won't always help.
 
 ### Process as Single Image (no segmentation)
 
@@ -166,10 +169,10 @@ spritesheet-cleanup sprite_sheet.png output/restored --pixel-w-guess 8.5 --pixel
 ## How It Works
 
 1. **Image Loading**: Loads the image and processes its alpha channel
-2. **Grid Detection**: Analyzes edge patterns to detect the original pixel grid size
+2. **Grid Detection**: Analyzes edge patterns to detect the cell grid size
 3. **Sprite Segmentation**: Identifies individual sprites based on connected alpha regions
 4. **Grid Refinement**: Optimizes grid lines for each sprite
-5. **Pixel Restoration**: Reduces each grid cell to a single pixel using median color
+5. **Pixel Restoration**: Reduces each cell to a single output pixel using median color (sampled from the center region of each cell by default)
 6. **Output**: Saves restored sprites individually or as a spritesheet
 
 ## License

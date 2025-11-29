@@ -32,7 +32,7 @@ class ProcessedImage:
         name: Descriptive name for the image (e.g., "sprite_0", "debug_cleaned_alpha")
         bbox: Original bounding box for sprites as (y1, y2, x1, x2), or None for debug images
         is_debug: True if this is a debug/intermediate image, False for final output sprites
-        metadata: Additional metadata (e.g., pixel size estimates, grid info)
+        metadata: Additional metadata (e.g., cell size estimates, grid info)
     """
     image: np.ndarray
     name: str
@@ -68,6 +68,7 @@ def process_spritesheet(
     pixel_h_slop: float = 0.33,
     no_segment: bool = False,
     bilateral_filter: bool = False,
+    sample_center_pct: float = 60.0,
     debug: bool = False
 ) -> Generator[ProcessedImage, None, None]:
     """
@@ -85,18 +86,22 @@ def process_spritesheet(
                Must be 3D array with shape (height, width, 3) or (height, width, 4).
         min_sprite_size: Minimum size of sprite in pixels after restoration.
                         Sprites smaller than this will be filtered out.
-        pixel_w_guess: Optional initial guess for pixel width in the source image.
+        pixel_w_guess: Optional initial guess for cell width in the source image.
                       If not provided, it will be estimated automatically.
-        pixel_h_guess: Optional initial guess for pixel height in the source image.
+        pixel_h_guess: Optional initial guess for cell height in the source image.
                       If not provided, it will be estimated automatically.
-        pixel_w_slop: Multiplier for pixel width guess tolerance. Higher values
-                     allow more variation in detected pixel widths.
-        pixel_h_slop: Multiplier for pixel height guess tolerance. Higher values
-                     allow more variation in detected pixel heights.
+        pixel_w_slop: Multiplier for cell width guess tolerance. Higher values
+                     allow more variation in detected cell widths.
+        pixel_h_slop: Multiplier for cell height guess tolerance. Higher values
+                     allow more variation in detected cell heights.
         no_segment: If True, skip sprite segmentation and process the entire image
                    as a single sprite.
         bilateral_filter: If True, apply bilateral noise filtering before processing.
                          Useful for images with JPEG artifacts or noise.
+        sample_center_pct: Percentage (0-100) of each cell to sample from the center.
+                          Lower values sample a smaller region from the center of each
+                          cell, which helps avoid color bleeding from adjacent cells.
+                          100 uses the full cell, 60 (default) uses center 60% width/height.
         debug: If True, yield intermediate processing images for debugging.
 
     Yields:
@@ -105,7 +110,7 @@ def process_spritesheet(
         - name: Descriptive name (e.g., "sprite_0", "debug_cleaned_alpha")
         - bbox: Original bounding box as (y1, y2, x1, x2) for sprites, None for debug images
         - is_debug: True for debug images, False for final sprites
-        - metadata: Optional dict with additional info (e.g., pixel size estimates)
+        - metadata: Optional dict with additional info (e.g., cell size estimates)
 
         Images are yielded in processing order. Debug images (if enabled) are yielded
         as they're created, followed by final sprites in their source order.
@@ -181,7 +186,7 @@ def process_spritesheet(
             metadata=None
         )
 
-    # Estimate pixel size for the entire image
+    # Estimate cell size for the entire image
     pix_w, pix_h, w_std, h_std = estimate_grid_size(
         img,
         debug=debug,
@@ -191,7 +196,7 @@ def process_spritesheet(
         h_slop_mult=pixel_h_slop
     )
 
-    # Segment sprites using the minimum size derived from estimated pixel size
+    # Segment sprites using the minimum size derived from estimated cell size
     if no_segment:
         sprite_regions = [(0, img.shape[0], 0, img.shape[1])]
     else:
@@ -211,7 +216,7 @@ def process_spritesheet(
                 metadata={"num_sprites": len(sprite_regions)}
             )
 
-    # Process each sprite, restore it to original pixel size
+    # Process each sprite, downscale cells to output pixels
     for i, region in enumerate(sprite_regions):
         y1, y2, x1, x2 = region
         sprite = img[y1:y2, x1:x2].copy()
@@ -237,7 +242,7 @@ def process_spritesheet(
                 metadata={"sprite_index": i}
             )
 
-        restored_sprite = restore_smallscale_image(sprite, h_lines, v_lines)
+        restored_sprite = restore_smallscale_image(sprite, h_lines, v_lines, sample_center_pct)
 
         # Yield debug visualization of the restored sprite (upscaled)
         if debug:

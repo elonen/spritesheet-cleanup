@@ -8,11 +8,12 @@ restoring it to its original resolution.
 If the image has an alpha channel, it is by default assumed to be a sprite sheet
 and will be segmented into individual sprites. Grid is fine tuned for each sprite,
 so the program can also handle images where the sprites are not precisely aligned
-to a commong pixel grid - as long as their pixels are the roughly the same.
+to a common cell grid - as long as their cells are roughly the same size.
 
-The program uses bilateral filtering to reduce noise, estimates the pixel grid,
-segments the image into sprites, and restores each sprite to its original pixel size,
-using median color for each pixel.
+Each grid rectangle in the high-resolution input is called a "cell" - it represents
+a single pixel in the restored output. The program detects the cell grid, segments
+the image into sprites, and reduces each cell to a single output pixel using the
+median color sampled from its center region.
 """
 
 from pathlib import Path
@@ -28,33 +29,35 @@ from spritesheet_cleanup.sprite_save import save_sprites
 @click.argument('output_path', type=click.Path())
 @click.option('--min-sprite-size', '-m', type=float, default=2.0,
               help='Minimum size of sprite in pixels after restoration')
-@click.option('--pixel-w-guess', '-w', type=float, help='Initial guess for pixel width')
-@click.option('--pixel-h-guess', '-h', type=float, help='Initial guess for pixel height')
+@click.option('--pixel-w-guess', '-w', type=float, help='Initial guess for cell width')
+@click.option('--pixel-h-guess', '-h', type=float, help='Initial guess for cell height')
 @click.option('--pixel-w-slop', '-ws', type=float, default=0.33,
-              help='Multiplier for pixel width guess tolerance')
+              help='Multiplier for cell width guess tolerance')
 @click.option('--pixel-h-slop', '-hs', type=float, default=0.33,
-              help='Multiplier for pixel height guess tolerance')
+              help='Multiplier for cell height guess tolerance')
 @click.option('--no-segment', '-n', is_flag=True, help='Skip sprite segmentation, restore the entire image')
 @click.option('--bilateral-filter', '-b', is_flag=True, help='Apply bilateral noise filter')
+@click.option('--sample-center', '-c', type=float, default=60.0,
+              help='Percentage of each grid cell to sample from center (0-100)')
 @click.option('--spritesheet', '-s', is_flag=True,
               help='Create a single spritesheet instead of individual files')
 @click.option('--debug', '-d', is_flag=True, help='Save intermediate images for debugging')
 def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_guess: float | None,
          pixel_h_guess: float | None, pixel_w_slop: float, pixel_h_slop: float,
-         no_segment: bool, bilateral_filter: bool, spritesheet: bool, debug: bool) -> None:
+         no_segment: bool, bilateral_filter: bool, sample_center: float, spritesheet: bool, debug: bool) -> None:
     """Restore scaled-up, noisy, distorted pixel images to their original (lower) resolution.
 
     If the image has an alpha channel, it is assumed to be a sprite sheet and will by default
     be segmented into individual sprites. This can enhance the restoration process,
-    especially if the sprites are not precisely aligned to a common pixel grid.
+    especially if the sprites are not precisely aligned to a common cell grid.
 
     INPUT_PATH is the path to the input image file.
 
     OUTPUT_PATH is the path where output images will be saved.
 
-    If grid size is detected incorrectly, you can provide an initial guess for the pixel width
+    If grid size is detected incorrectly, you can provide an initial guess for the cell width
     and height using the -w -h options. The program will then
-    estimate the pixel size based on this guess and the specified tolerance multipliers.
+    estimate the cell size based on this guess and the specified tolerance multipliers.
     """
     # Load the image
     img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
@@ -85,6 +88,7 @@ def main(input_path: str, output_path: str, min_sprite_size: float, pixel_w_gues
             pixel_h_slop=pixel_h_slop,
             no_segment=no_segment,
             bilateral_filter=bilateral_filter,
+            sample_center_pct=sample_center,
             debug=debug
         ):
             if result.is_debug:

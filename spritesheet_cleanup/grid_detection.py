@@ -13,14 +13,14 @@ def estimate_grid_size(
         h_slop_mult: float = 0.3,
         ) -> tuple[float, float, float, float, ]:
     """
-    Detect the original pixel grid size in a scaled-up pixel art image.
+    Detect the cell grid size in a scaled-up pixel art image.
 
     Args:
         img: Input image (can be BGRA)
-        initial_estimate: Initial estimate of the pixel size, if available
+        initial_estimate: Initial estimate of the cell size, if available
 
     Returns:
-        Estimated pixel size and standard deviations for width and height
+        Estimated cell size and standard deviations for width and height
     """
 
     # Find edges using Sobel filter over all channels, then threshold to binary
@@ -135,7 +135,7 @@ def estimate_grid_size(
             print(f"Not enough data points for fitting gaussian in {'horizontal' if direction == 0 else 'vertical'} direction. Using simple estimate.")
             results.extend([simple_estimate, 1.0])
 
-    return results[0], results[2], results[1], results[3]   # pixel width, pixel height, std_dev_w, std_dev_h
+    return results[0], results[2], results[1], results[3]   # cell width, cell height, std_dev_w, std_dev_h
 
 
 def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, _std_dev_w: float, _std_dev_h: float) -> tuple[list[int], list[int], np.ndarray]:
@@ -144,8 +144,8 @@ def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, _std_dev_w: float, 
 
     Args:
         img: Input image
-        pix_w: Estimated pixel width
-        pix_h: Estimated pixel height
+        pix_w: Estimated cell width
+        pix_h: Estimated cell height
         std_dev_w: Standard deviation of width
         std_dev_h: Standard deviation of height
 
@@ -160,7 +160,7 @@ def refine_grid(img: np.ndarray, pix_w: float, pix_h: float, _std_dev_w: float, 
     for dir in (0,1):   # Horizontal, Vertical
         if dir == 0:
             edge_img = edges
-            avg_step = pix_h    # Gap between two horizontal lines = pixel height
+            avg_step = pix_h    # Gap between two horizontal lines = cell height
         else:
             edge_img = cv2.transpose(edges)
             avg_step = pix_w
